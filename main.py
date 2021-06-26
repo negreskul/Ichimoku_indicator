@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
-import math
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 mpl.style.use('seaborn')
 import matplotlib.dates as mdates
 from mpl_finance import candlestick_ohlc
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, r2_score
 
 class IndicatorMixin:
 
@@ -177,7 +179,8 @@ def add_ichimoku(
     return df
 ########################################
 
-df = pd.read_csv("BTC.csv", sep=",")
+df = pd.read_csv("ETH.csv", sep=",")
+df = df.append(pd.DataFrame({'Date': pd.date_range(start=df.iloc[df.Date.count()-1].Date, periods=26)}))
 df = add_ichimoku(df, "High", "Low", "Close", fillna=True)
 
 df['Date'] =pd.to_datetime(df.Date)
@@ -187,12 +190,41 @@ ohlc['Date'] = pd.to_datetime(ohlc['Date'])
 ohlc['Date'] = ohlc['Date'].apply(mdates.date2num)
 ohlc = ohlc.astype(float)
 
+# Random Forest
+df4rf = pd.read_csv('CryptoCoinClose.csv')
+
+features = ['BTC', 'XRP', 'XLM', 'LTC' ]
+X = df4rf[features]
+y = df4rf['ETH']
+
+train_X, val_X, train_y, val_y = train_test_split(X, y, random_state=1)
+
+rf_model = RandomForestRegressor(random_state=1, n_estimators = 300, max_depth=15)
+
+rf_model.fit(train_X, train_y)
+
+rf_pred = rf_model.predict(val_X)
+date_array = pd.date_range(start="06/04/2021", end="06/13/2021")
+predict_array = rf_model.predict(X.tail(10))
+print(predict_array.size)
+print(date_array.size)
+
+data = { 'Date': date_array,
+        'Forecast': predict_array }
+
+df4rf = pd.DataFrame(data)
 # Creating Subplots
 fig, ax = plt.subplots()
 
 candlestick_ohlc(ax, ohlc.values, width=0.6, colorup='green', colordown='red', alpha=0.8)
-plt.plot(df.Date,df.trend_ichimoku_a, label='Ichimoku a')
-plt.plot(df.Date,df.trend_ichimoku_b, label='Ichimoku b')
+
+plt.plot(df.Date.iloc[:df.Date.count()-26],df.trend_ichimoku_conv.iloc[:df.Date.count()-26], label='Tenkan', color='green')
+plt.plot(df.Date.iloc[:df.Date.count()-26],df.trend_ichimoku_base.iloc[:df.Date.count()-26], label='Kijun', color='red')
+plt.plot(df.Date,df.trend_ichimoku_a, label='Senkou Span a', color='dimgrey')
+plt.plot(df.Date,df.trend_ichimoku_b, label='Senkou Span b', color='dimgray')
+#plt.plot(df4rf.Date, df4rf.Forecast, label='Random Forest', color='blue')
+plt.fill_between(df.Date,df.trend_ichimoku_a, df.trend_ichimoku_b, where=(df.trend_ichimoku_a > df.trend_ichimoku_b), facecolor='lightgreen')
+plt.fill_between(df.Date,df.trend_ichimoku_a, df.trend_ichimoku_b, where=(df.trend_ichimoku_b > df.trend_ichimoku_a), facecolor='tomato')
 # Setting labels & titles
 ax.set_xlabel('Date')
 ax.set_ylabel('Price')
